@@ -1,0 +1,15 @@
+# API backend configuration
+
+# URL scheme to reach the backend API for transcriptions.
+base_url: http://localai.example.org/v1
+
+# The name of the API model.
+model_name: tiny
+
+# The default language of voice messages.
+# https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
+# Set to `auto` for auto-detect.
+language: auto
+
+# API key
+api_key: mysecretkey

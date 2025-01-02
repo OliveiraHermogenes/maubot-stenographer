@@ -1,0 +1,12 @@
+maubot: 0.3.0
+id: br.net.pontofixo.stenographer
+version: 0.0.5
+license: AGPL-3.0-or-later
+modules:
+  - stenographer
+main_class: Stenographer
+config: true
+extra_files:
+  - base-config.yaml
+dependencies:
+  - openai
