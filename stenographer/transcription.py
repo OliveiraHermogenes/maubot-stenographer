@@ -1,8 +1,8 @@
-from typing import Tuple, Type, Optional, Any
+from typing import Tuple, Type
 
 import mautrix.crypto.attachments
 from maubot import Plugin, MessageEvent
-from maubot.handlers import command, event, web
+from maubot.handlers import command, event
 from mautrix.client import Client as MatrixClient
 from mautrix.types import MessageType, EventType, MediaMessageEventContent, EncryptedFile
 from mautrix.util.config import BaseProxyConfig
