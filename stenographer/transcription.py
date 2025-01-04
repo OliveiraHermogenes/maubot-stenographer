@@ -1,4 +1,4 @@
-from typing import Tuple, Type
+from typing import Type
 
 import mautrix.crypto.attachments
 from maubot import Plugin, MessageEvent
@@ -23,8 +23,12 @@ async def download_encrypted_media(file: EncryptedFile, client: MatrixClient) ->
     :param client: The Matrix client. Can be accessed via MessageEvent.client
     :return: The media file as bytes.
     """
-    return mautrix.crypto.attachments.decrypt_attachment(await client.download_media(file.url), file.key.key,
-                                                         file.hashes['sha256'], file.iv)
+    return mautrix.crypto.attachments.decrypt_attachment(
+        await client.download_media(file.url),
+        file.key.key,
+        file.hashes['sha256'],
+        file.iv
+    )
 
 
 async def download_unencrypted_media(url, client: MatrixClient) -> bytes:
@@ -40,73 +44,49 @@ async def download_unencrypted_media(url, client: MatrixClient) -> bytes:
 class Stenographer(Plugin):
     config: Config  # Set type for type hinting
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    if not OPENAI_INSTALLED:
+        self.log.error("The plugin needs OpenAI's offical library in order to send requests to the API. (pip install openai)")
 
-        # Initialize variables
-        self.model = None
-        self.key = None
-        self.language = None
-        self.url = None
-
-    allowed_msgtypes: Tuple[MessageType, ...] = (MessageType.AUDIO,)
-
-    def on_config_update(self) -> None:
-        """
-        Called by `Config` when the configuration is updated
-        """
-        if OPENAI_INSTALLED:
-            self.url = self.config['base_url']
-            self.model = self.config['model_name']
-            self.key = self.config['api_key']
-            self.language = self.config['language']
-        else:  # openai library is not installed
-            self.log.error("The plugin needs OpenAI's offical library in order to send requests to the API. (pip install openai)")
-
-    async def pre_start(self) -> None:
-        """
-        Called before the handlers are initialized
-        :return:
-        """
-        # Make Config call self.on_config_update whenever the config is updated.
-        self.config.set_on_update(self.on_config_update)
-        # Load the config. This will call self.on_config_update, which will load the model.
+    async def start(self) -> None:
         self.config.load_and_update()
-
-    async def stop(self) -> None:
-        self.model = None
-        self.key = None
-        self.language = None
-        self.url = None        
 
     @event.on(EventType.ROOM_MESSAGE)
     async def transcribe_audio_message(self, evt: MessageEvent) -> None:
         """
         Replies to any voice message with its transcription.
         """
-        # Make sure that the message type is audio
+        # Only reply to voice messages
         if evt.content.msgtype != MessageType.AUDIO:
             return
 
         content: MediaMessageEventContent = evt.content
-        self.log.debug(F"Message received. MimeType: {content.info.mimetype}")
+        self.log.debug("A voice message was received.")
 
-        if content.url:  # content.url exists. File is not encrypted
+        if content.url:  # content.url exists. media is not encrypted
             data = await download_unencrypted_media(content.url, evt.client)
-        elif content.file:  # content.file exists. File is encrypted
+        elif content.file:  # content.file exists. media is encrypted
             data = await download_encrypted_media(content.file, evt.client)
-        else:  # shouldn't happen
-            self.log.warning("A message with AUDIO message type received, but it does not contain a file.")
+        else:
+            self.log.warning("A message with type audio was received, but no media was found.")
             return
 
         # initialize the client
-        client = AsyncOpenAI(base_url=self.url, api_key=self.key)
+        client = AsyncOpenAI(base_url=self.config['base_url'], api_key=self.config['api_key'])
 
         # send audio for transcription
-        if self.language == 'auto':
-            transc = await client.audio.transcriptions.create(file=data, model=self.model, response_format="text")
+        if self.config['language'] == 'auto':
+            transc = await client.audio.transcriptions.create(
+                file=data,
+                model=self.config['model_name'],
+                response_format="text"
+            )
         else:
-            transc = await client.audio.transcriptions.create(file=data, model=self.model, language=self.language, response_format="text")
+            transc = await client.audio.transcriptions.create(
+                file=data,
+                model=self.config['model_name'],
+                language=self.config['language'],
+                response_format="text"
+            )
 
         self.log.debug(F"Message transcribed: {transc}")
 
