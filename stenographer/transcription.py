@@ -94,6 +94,21 @@ class Stenographer(Plugin):
         await evt.reply(transc)
         self.log.debug("Reply sent")
 
+    @command.new(name='stgr', help='Transcribe related voice message.', require_subcommand=False)
+    async def on_command(self, evt: MessageEvent) -> None:
+        """Transcribe the voice message replied to."""
+        if not evt.content.relates_to:
+            await evt.reply("You need to reply to a voice message to transcribe it.")
+            return
+        
+        replied_event = await evt.client.get_event(evt.room_id, evt.content.get_reply_to())
+
+        if replied_event.content.msgtype != MessageType.AUDIO:
+            await evt.reply("The replied-to message is not a voice message.")
+            return
+        
+        await self.transcribe_audio_message(replied_event)
+
     @classmethod
     def get_config_class(cls) -> Type[BaseProxyConfig]:
         return Config
