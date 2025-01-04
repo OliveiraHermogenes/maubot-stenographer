@@ -79,8 +79,8 @@ class Stenographer(Plugin):
         self.language = None
         self.url = None        
 
-    @command.passive("", msgtypes=(MessageType.AUDIO,))
-    async def transcribe_audio_message(self, evt: MessageEvent, match: Tuple[str]) -> None:
+    @event.on(EventType.ROOM_MESSAGE)
+    async def transcribe_audio_message(self, evt: MessageEvent) -> None:
         """
         Replies to any voice message with its transcription.
         """
