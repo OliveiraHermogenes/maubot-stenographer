@@ -1,5 +1,6 @@
 from typing import Type
 
+import aiohttp
 import mautrix.crypto.attachments
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command, event
@@ -8,13 +9,6 @@ from mautrix.types import MessageType, EventType, MediaMessageEventContent, Encr
 from mautrix.util.config import BaseProxyConfig
 
 from .config import Config
-
-try:
-    from openai import AsyncOpenAI
-    OPENAI_INSTALLED = True
-except ModuleNotFoundError:
-    OPENAI_INSTALLED = False
-
 
 async def download_encrypted_media(file: EncryptedFile, client: MatrixClient) -> bytes:
     """
@@ -44,9 +38,6 @@ async def download_unencrypted_media(url, client: MatrixClient) -> bytes:
 class Stenographer(Plugin):
     config: Config  # Set type for type hinting
 
-    if not OPENAI_INSTALLED:
-        self.log.error("The plugin needs OpenAI's offical library in order to send requests to the API. (pip install openai)")
-
     async def start(self) -> None:
         self.config.load_and_update()
 
@@ -70,24 +61,33 @@ class Stenographer(Plugin):
             self.log.warning("A message with type audio was received, but no media was found.")
             return
 
-        # initialize the client
-        client = AsyncOpenAI(base_url=self.config['base_url'], api_key=self.config['api_key'])
+        # POST endpoint
+        api_endpoint = self.config['base_url'] + '/audio/transcriptions'
+
+        # Header for API KEY
+        self.http.headers["Authorization"] = "Bearer " + self.config['api_key']
+
+        # initialize data for the POST request
+        request_data = aiohttp.FormData()
+
+
+        request_data.add_field(
+            'file',
+            data,
+            content_type=content.info.mimetype
+            )
+
+        request_data.add_field('model', self.config['model_name'])
+        
+        if self.config['language'] != 'auto':
+            request_data.add_field('language', self.config['language'])
 
         # send audio for transcription
-        if self.config['language'] == 'auto':
-            transc = await client.audio.transcriptions.create(
-                file=data,
-                model=self.config['model_name'],
-                response_format="text"
-            )
-        else:
-            transc = await client.audio.transcriptions.create(
-                file=data,
-                model=self.config['model_name'],
-                language=self.config['language'],
-                response_format="text"
-            )
+        response = await self.http.post(api_endpoint, data=request_data)
 
+        response_json = await response.json()
+        transc = str(response_json["text"])
+        
         self.log.debug(F"Message transcribed: {transc}")
 
         # send transcription as reply
