@@ -1,6 +1,6 @@
 maubot: 0.3.0
 id: br.net.pontofixo.stenographer
-version: 0.0.5
+version: 0.1.0
 license: AGPL-3.0-or-later
 modules:
   - stenographer
