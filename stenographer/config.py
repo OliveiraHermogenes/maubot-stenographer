@@ -6,4 +6,5 @@ class Config(BaseProxyConfig):
         helper.copy("model_name")
         helper.copy("api_key")
         helper.copy("language")
-        helper.copy("translate")
+        helper.copy("reaction")
+        helper.copy("auto")

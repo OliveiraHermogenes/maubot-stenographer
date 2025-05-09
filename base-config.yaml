@@ -1,6 +1,6 @@
-# API backend configuration
+# Stenographer configuration
 
-# URL scheme to reach the backend API for transcriptions.
+# URL to reach the backend API for transcriptions.
 base_url: http://localai.example.org/v1
 
 # The name of the API model.
@@ -13,3 +13,12 @@ language: auto
 
 # API key
 api_key: mysecretkey
+
+# A reaction to trigger a transcription job.
+# This is usually some emoji. Put the empty string '' to disable.
+reaction: 🔇
+
+# Whether the bot should respond automatically to voice messages.
+# Setting this to `false` only makes sense when triggering with
+# a reaction is enabled.
+auto: true

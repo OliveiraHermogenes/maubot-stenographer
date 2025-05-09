@@ -5,7 +5,8 @@ import mautrix.crypto.attachments
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command, event
 from mautrix.client import Client as MatrixClient
-from mautrix.types import MessageType, EventType, MediaMessageEventContent, EncryptedFile
+from mautrix.types import MessageType, EventType, GenericEvent, MediaMessageEventContent, EncryptedFile
+
 from mautrix.util.config import BaseProxyConfig
 
 from .config import Config
@@ -36,29 +37,52 @@ async def download_unencrypted_media(url, client: MatrixClient) -> bytes:
 
 
 class Stenographer(Plugin):
-    config: Config  # Set type for type hinting
+    config: Config
 
     async def start(self) -> None:
         self.config.load_and_update()
 
-    @event.on(EventType.ROOM_MESSAGE)
+    @event.on(EventType.ALL)
+    async def should_respond(self, evt: GenericEvent) -> None:
+        """Respond to events when appropriate."""
+
+        match evt.type:
+            case EventType.REACTION:
+                # Check whether the reaction should trigger a response
+                if evt.content.relates_to.key == self.config['reaction']:
+                    reacted_event = await evt.client.get_event(evt.room_id, evt.content.relates_to.event_id)
+                    self.log.debug("Reaction detected. Transcribing parent event %s.", reacted_event.event_id)
+                    await self.transcribe_audio_message(reacted_event)
+                else:
+                    return
+            case EventType.ROOM_MESSAGE: 
+                # Check whether messages should be automatically sent for transcription.
+                # The `transcribe_audio_message` function will ignore anything that's not an audio message.
+                if  self.config['auto']:
+                    await self.transcribe_audio_message(evt)
+                else:
+                    return
+            case _:
+                return
+            
     async def transcribe_audio_message(self, evt: MessageEvent) -> None:
         """
-        Replies to any voice message with its transcription.
+        Reply to voice message with its transcription.
         """
-        # Only reply to voice messages
+        # Consider only voice messages
         if evt.content.msgtype != MessageType.AUDIO:
+            self.log.debug("Event %s is not an audio message. Ignoring.", evt.event_id)
             return
 
         content: MediaMessageEventContent = evt.content
-        self.log.debug("A voice message was received.")
+        self.log.debug("A voice message was detected.")
 
         if content.url:  # content.url exists. media is not encrypted
             data = await download_unencrypted_media(content.url, evt.client)
         elif content.file:  # content.file exists. media is encrypted
             data = await download_encrypted_media(content.file, evt.client)
         else:
-            self.log.warning("A message with type audio was received, but no media was found.")
+            self.log.warning("A message with type audio was detected, but no media was found.")
             return
 
         # POST endpoint

@@ -14,6 +14,6 @@ Simply invite the bot to a room and it's going to automatically reply to voice m
 
 ## Roadmap
 
-- ability to trigger transcription of a voice message with a command reply and/or emoji reaction
+- ~~ability to trigger transcription of a voice message with a command reply and/or emoji reaction~~
 - ability to toggle on/off automatic transcriptions on a per room basis
 - ability to set the default language on a per room basis
