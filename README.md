@@ -10,10 +10,10 @@ A simple plugin for [maubot](https://mau.bot) that automatically transcribes voi
 
 ## Usage
 
-Simply invite the bot to a room and it's going to automatically reply to voice messages with transcriptions.
+Invite the bot to a room. Once in the room, the bot is going to reply to voice messages with transcriptions according to your settings. Write `!stgr` in a room to get more information about commands to overwrite the settings for a particular room.
 
 ## Roadmap
 
 - ~~ability to trigger transcription of a voice message with a command reply and/or emoji reaction~~
-- ability to toggle on/off automatic transcriptions on a per room basis
-- ability to set the default language on a per room basis
+- ~~ability to toggle on/off automatic transcriptions on a per room basis~~
+- ~~ability to set the default language on a per room basis~~
