@@ -1,10 +1,12 @@
-maubot: 0.3.0
+maubot: 0.5.0
 id: br.net.pontofixo.stenographer
-version: 0.2.0
+version: 0.2.1
 license: AGPL-3.0-or-later
 modules:
   - stenographer
 main_class: Stenographer
 config: true
+database: true
+database_type: asyncpg
 extra_files:
   - base-config.yaml
