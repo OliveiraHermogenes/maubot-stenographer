@@ -8,8 +8,10 @@ from mautrix.client import Client as MatrixClient
 from mautrix.types import MessageType, EventType, GenericEvent, MediaMessageEventContent, EncryptedFile
 
 from mautrix.util.config import BaseProxyConfig
+from mautrix.util.async_db import UpgradeTable
 
 from .config import Config
+from .db import DB, upgrade_table
 
 async def download_encrypted_media(file: EncryptedFile, client: MatrixClient) -> bytes:
     """
@@ -38,9 +40,11 @@ async def download_unencrypted_media(url, client: MatrixClient) -> bytes:
 
 class Stenographer(Plugin):
     config: Config
+    db: DB
 
     async def start(self) -> None:
         self.config.load_and_update()
+        self.db = DB(self.database)
 
     @event.on(EventType.ALL)
     async def should_respond(self, evt: GenericEvent) -> None:
@@ -51,31 +55,38 @@ class Stenographer(Plugin):
                 # Check whether the reaction should trigger a response
                 if evt.content.relates_to.key == self.config['reaction']:
                     reacted_event = await evt.client.get_event(evt.room_id, evt.content.relates_to.event_id)
+                    # Check whether the reaction was to a voice message
+                    if reacted_event.content.msgtype != MessageType.AUDIO:
+                        self.log.debug("Event %s is not an audio message. Ignoring.", reacted_event.event_id)
+                        return
+
                     self.log.debug("Reaction detected. Transcribing parent event %s.", reacted_event.event_id)
                     await self.transcribe_audio_message(reacted_event)
                 else:
                     return
-            case EventType.ROOM_MESSAGE: 
-                # Check whether messages should be automatically sent for transcription.
-                # The `transcribe_audio_message` function will ignore anything that's not an audio message.
-                if  self.config['auto']:
-                    await self.transcribe_audio_message(evt)
-                else:
+            case EventType.ROOM_MESSAGE:
+                # Check whether it is a voice message
+                if evt.content.msgtype != MessageType.AUDIO:
+                    self.log.debug("Event %s is not an audio message. Ignoring.", evt.event_id)
                     return
+                # Check whether voice messages should be automatically sent for transcription.
+                custom_auto_setting = await self.db.get_auto(evt.room_id)
+                if  custom_auto_setting != None:
+                    if custom_auto_setting:
+                        await self.transcribe_audio_message(evt)
+                    else:
+                        return
+                elif self.config['auto']:
+                    await self.transcribe_audio_message(evt)
             case _:
                 return
             
     async def transcribe_audio_message(self, evt: MessageEvent) -> None:
         """
-        Reply to voice message with its transcription.
+        Replies to voice message with its transcription.
         """
-        # Consider only voice messages
-        if evt.content.msgtype != MessageType.AUDIO:
-            self.log.debug("Event %s is not an audio message. Ignoring.", evt.event_id)
-            return
 
         content: MediaMessageEventContent = evt.content
-        self.log.debug("A voice message was detected.")
 
         if content.url:  # content.url exists. media is not encrypted
             data = await download_unencrypted_media(content.url, evt.client)
@@ -102,8 +113,15 @@ class Stenographer(Plugin):
             )
 
         request_data.add_field('model', self.config['model_name'])
-        
-        if self.config['language'] != 'auto':
+
+        custom_language = await self.db.get_language(evt.room_id)
+
+        if custom_language != None:
+            language = self.config['language']
+        else:
+            language = custom_language
+
+        if language != 'auto':
             request_data.add_field('language', self.config['language'])
 
         # send audio for transcription
@@ -118,6 +136,46 @@ class Stenographer(Plugin):
         await evt.reply(transc)
         self.log.debug("Reply sent")
 
+    @command.new(name='stgr', help='A stenographer to transcribe your voice messages.')
+    async def stenographer(self, evt: MessageEvent) -> None:
+        # we require a subcommand
+        pass
+
+    @stenographer.subcommand(name='transcribe', help='Trigger transcription of related voice message.')
+    async def trigger_transciption(self, evt: MessageEvent) -> None:
+        """Transcribe the voice message replied to."""
+        if not evt.content.relates_to:
+            await evt.reply("You need to reply to a voice message to transcribe it.")
+            return
+
+        replied_event = await evt.client.get_event(evt.room_id, evt.content.get_reply_to())
+
+        if replied_event.content.msgtype != MessageType.AUDIO:
+            await evt.reply("The replied-to message is not a voice message.")
+            return
+
+        await self.transcribe_audio_message(replied_event)
+
+    @stenographer.subcommand(name='language', help='Set a custom language for this room.')
+    @command.argument('language', 'ISO 639-1')
+    async def set_language_for_room(self, evt: MessageEvent, language: str) -> None:
+        """Store language preference for the room in the database."""
+        self.log.debug("Setting custom language for room %s to %s", evt.room_id, language)
+        await self.db.put_language(evt.room_id, language)
+
+    @stenographer.subcommand(name='auto', help='Toggle automatic transcriptions for this room.')
+    @command.argument('toggle', 'on / off')
+    async def toggle_auto_transcription(self, evt: MessageEvent, toggle: str) -> None:
+        """Store auto preference for the room in the database."""
+        if toggle == 'on':
+            await self.db.put_auto(evt.room_id, True)
+        elif toggle == 'off':
+            await self.db.put_auto(evt.room_id, False)
+
     @classmethod
     def get_config_class(cls) -> Type[BaseProxyConfig]:
         return Config
+
+    @classmethod
+    def get_db_upgrade_table(cls) -> UpgradeTable:
+        return upgrade_table
